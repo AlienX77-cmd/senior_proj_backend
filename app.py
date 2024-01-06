@@ -1,9 +1,17 @@
-from flask import Flask, request, jsonify, send_file
+import matplotlib
+matplotlib.use('Agg')  # Use the Anti-Grain Geometry non-GUI backend
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import yfinance as yf
-from pypfopt import EfficientFrontier, risk_models, expected_returns, objective_functions
+from pypfopt import EfficientFrontier, risk_models, expected_returns, objective_functions, plotting
+
+import numpy as np 
 import pandas as pd
-import matplotlib.pyplot as plt
+
 from io import BytesIO
 import base64
 
@@ -11,10 +19,6 @@ app = Flask(__name__, static_folder='static')
 
 # Enable CORS
 CORS(app)
-
-import matplotlib
-matplotlib.use('Agg')  # Use the Anti-Grain Geometry non-GUI backend
-
 
 @app.route('/', methods=['GET'])
 def home():
@@ -56,7 +60,33 @@ def portfolio_optimization():
             # Perform portfolio optimization
             ef = EfficientFrontier(mu, S)
             ef.add_objective(objective_functions.L2_reg)
+
+            # Setup for creating Efficient Frontier
+            fig, ax = plt.subplots()
+            plotting.plot_efficient_frontier(ef, ax=ax, show_assets=True, show_tickers=True)
+
+            # Minimize risk for the give return => Expected return = m (from the first constraint)
             ef.efficient_return(user_value)
+
+            # Create Efficient Frontier
+            expected_annual_return, annual_volatility, sharpe_ratio = performance = ef.portfolio_performance(verbose=True)
+            ax.scatter(
+            annual_volatility,  # Volatility
+            expected_annual_return, # Return
+            color="red",
+            marker="o",
+            label="Optimal Point",
+            )
+            ax.legend()
+
+            # Save the efficient frontier plot to a BytesIO object and encode it to base64
+            frontier_io = BytesIO()
+            plt.savefig(frontier_io, format='png', bbox_inches='tight')
+            plt.close(fig)
+            frontier_io.seek(0)
+            frontier_b64 = base64.b64encode(frontier_io.read()).decode('utf-8')
+
+            # Cleaned Weights
             cleaned_weights = ef.clean_weights()
 
             # Calculate Volume for each stock
@@ -69,7 +99,33 @@ def portfolio_optimization():
             # Perform portfolio optimization
             ef = EfficientFrontier(mu, S)
             ef.add_objective(objective_functions.L2_reg)
+
+            # Setup for creating Efficient Frontier
+            fig, ax = plt.subplots()
+            plotting.plot_efficient_frontier(ef, ax=ax, show_assets=True, show_tickers=True)
+
+            # Maximise return for a given risk, with L2 regularisation
             ef.efficient_risk(user_value)
+
+            # Create Efficient Frontier
+            expected_annual_return, annual_volatility, sharpe_ratio = performance = ef.portfolio_performance(verbose=True)
+            ax.scatter(
+            annual_volatility,  # Volatility
+            expected_annual_return, # Return
+            color="red",
+            marker="o",
+            label="Optimal Point",
+            )
+            ax.legend()
+
+            # Save the efficient frontier plot to a BytesIO object and encode it to base64
+            frontier_io = BytesIO()
+            plt.savefig(frontier_io, format='png', bbox_inches='tight')
+            plt.close(fig)
+            frontier_io.seek(0)
+            frontier_b64 = base64.b64encode(frontier_io.read()).decode('utf-8')
+
+            # Cleaned Weights
             cleaned_weights = ef.clean_weights()
 
             # Calculate Volume for each stock
@@ -96,6 +152,7 @@ def portfolio_optimization():
             "performance": ef.portfolio_performance(verbose=True),
             "volume for each stock": Volume_for_each_stock,
             "pie_chart_b64": pie_chart_b64,
+            "ef": frontier_b64,
             "constraint": constraint
         }
         return jsonify(response)
