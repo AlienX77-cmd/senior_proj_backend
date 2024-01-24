@@ -11,14 +11,20 @@ from pypfopt import EfficientFrontier, risk_models, expected_returns, objective_
 
 import numpy as np 
 import pandas as pd
+from datetime import datetime, timedelta
 
 from io import BytesIO
 import base64
+
+from Volume_Pred import Vol_Pred
+from Adaptive_OE import Adapt_OE
 
 app = Flask(__name__, static_folder='static')
 
 # Enable CORS
 CORS(app)
+
+metadata = {}
 
 @app.route('/', methods=['GET'])
 def home():
@@ -38,7 +44,8 @@ def portfolio_optimization():
         constraint = data['constraint']
         user_value = data['inputValue']
         volume = data['totalVolume']
-        duration = data['duration']
+        duration_str = data['duration']  # e.g., '3h'
+        duration_hours = int(duration_str.replace('h', ''))  # Remove the 'h' and convert to int
 
         user_value = float(user_value/100)
         volume = int(volume)
@@ -146,6 +153,36 @@ def portfolio_optimization():
         pie_chart_io.seek(0)
         pie_chart_b64 = base64.b64encode(pie_chart_io.read()).decode('utf-8')  # Encode as base64
 
+
+        # Update metadata with the new values
+        current_time = datetime.now()
+        for ticker, volume in Volume_for_each_stock.items():
+            symbol = ticker.replace(".BK", "")  # Remove the .BK if present
+            
+            # Initialize metadata for the symbol if it doesn't exist
+            if symbol not in metadata:
+
+                metadata[symbol] = {
+                    "start_time": (0, 0),
+                    "end_time": (0, 0),
+                    "want": 0,
+                    "left": 0,
+                    "market_volume": 0,
+                    "market_value": 0,
+                    "market_vwap": 0,
+                    "plan": [],
+                    "my_volume": 0,
+                    "my_value": 0,
+                    "my_vwap": 0,
+                }
+
+            # Now update the metadata for the symbol
+            metadata[symbol]["start_time"] = (current_time.hour, current_time.minute)
+            end_time = current_time + timedelta(hours=duration_hours)
+            metadata[symbol]["end_time"] = (end_time.hour, end_time.minute)
+            metadata[symbol]["want"] = volume
+            metadata[symbol]["left"] = volume
+
         # Prepare and return the response
         response = {
             "weights": weights_dict,
@@ -162,10 +199,29 @@ def portfolio_optimization():
         print(f"An error occurred: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/executions')
+@app.route('/executions', methods=['GET', 'POST'])
 def executions():
-    return jsonify({"message": "Executions Page"})
+    # # ============== Create Volume Prediction Models ===============
+    # stock_symbols = list(metadata.keys())
+    # Vol_Pred(stock_symbols)
+    # # ==============================================================
+    # metadata = Adapt_OE(metadata)
+    return jsonify(metadata)
+
+import threading
+import time
+
+# def background(a,b):
+#     while not b.is_set():
+#         print("Hello world ",a)
+#         time.sleep(1)
 
 if __name__ == '__main__':
+    # a = threading.Event()
+    # t = threading.Thread( target=background , args=(1,a))
     # Consider using a more secure host and port in production
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # t.start()
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=False)
+    # print("Hello world")
+    # a.set()
+    # t.join()
