@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 
 from sklearn.linear_model import LinearRegression
 import pickle
@@ -9,27 +10,40 @@ from Read_TrainingData import Read_TrainingData
 # stock_symbols = list(metadata.keys())
 
 def Vol_Pred(stock_symbols):
-    models = {symbol: {} for symbol in stock_symbols}
-    # Now, train models for each time frame and each stock
+    # Create a dictionary to hold all models for each stock symbol
+    models_by_symbol = {}
+
+    # Create Sample Data via Read_TrainingData
     Sample_Data = Read_TrainingData(stock_symbols)
+
+    # Train model for each stock (each pickle file represents 1 stock (which consist of summation of i = 1 to 250 models))
     for symbol in stock_symbols:
+        models_by_symbol[symbol] = {}
+    
+        model_filename = f'models/{symbol}.pkl'
+    
+        # If the model file already exists,
+        if os.path.exists(model_filename): continue  # Skip to the next symbol
+    
         for start_time in Sample_Data[symbol]:
+            models_by_symbol[symbol][start_time] = {}
+        
             for end_time in Sample_Data[symbol][start_time]:
-                model_filename = f'models/{symbol}_{start_time}_{end_time}.pkl'
+                train_data = np.array(Sample_Data[symbol][start_time][end_time])
+                trainx = train_data[:, :2]
+                trainy = train_data[:, 2]
 
-                # Check if the model file already exists
-                if not os.path.exists(model_filename):  # Model hasn't been created yet
-                    train_data = np.array(Sample_Data[symbol][start_time][end_time])
-                    trainx = train_data[:, :2]  # ALL rows but only first 2 columns as features
-                    trainy = train_data[:, 2]   # ALL rows but only the third column as target variable
+                model = LinearRegression().fit(trainx, trainy)
+                models_by_symbol[symbol][start_time][end_time] = model
 
-                    if start_time not in models[symbol]:  # Check if the model for start_time exists for the symbol
-                        models[symbol][start_time] = {}
+        # Save all models for the symbol to a single pickle file (only if any were trained)
+        if any(models_by_symbol[symbol].values()):  # Check if any models were trained
+            with open(f'models/{symbol}.pkl', 'wb') as model_file:
+                pickle.dump(models_by_symbol[symbol], model_file)
 
-                    # Train and save the model for the symbol and time frame if it doesn't exist
-                    models[symbol][start_time][end_time] = LinearRegression().fit(trainx, trainy)
-                    with open(model_filename, 'wb') as model_file:
-                        pickle.dump(models[symbol][start_time][end_time], model_file)
-                else:
-                    # Model is already existed in the models folder, so we skip the training
-                    pass
+# models/symbol.pkl
+# {
+#     (10,30) : {
+#         (22,30) : model
+#     }
+# }

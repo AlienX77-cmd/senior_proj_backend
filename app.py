@@ -16,8 +16,12 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import base64
 
+import threading
+import time
+
 from Volume_Pred import Vol_Pred
 from Adaptive_OE import Adapt_OE
+# from Adaptive_rabbit import Adapt_Rabbit
 
 app = Flask(__name__, static_folder='static')
 
@@ -26,12 +30,32 @@ CORS(app)
 
 metadata = {}
 
+# # Function to run in the background thread
+# def execution(metadata):
+#     metadata = Adapt_OE(metadata)
+#     return metadata
+
+# # Thread target function
+# def start_execution_thread():
+#     # Pass the global metadata to the execution function
+#     global metadata
+#     # Start the Adapt_Rabbit function in a separate thread
+#     thread = threading.Thread(target=execution, args=(metadata,))
+#     thread.daemon = True  # This ensures the thread will be closed when the main process exits
+#     thread.start()
+
+# @app.before_first_request
+# def before_first_request():
+#     # This will start the execution thread when the first request hits the Flask server
+#     start_execution_thread()
+
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Mia Khalifa"})
 
 @app.route('/portfolio', methods=['GET', 'POST'])
 def portfolio_optimization():
+    # global metadata  # Add this line to use the global metadata variable
     try:
         # Get data from POST request
         data = request.get_json()  # This will parse the incoming JSON payload
@@ -153,7 +177,6 @@ def portfolio_optimization():
         pie_chart_io.seek(0)
         pie_chart_b64 = base64.b64encode(pie_chart_io.read()).decode('utf-8')  # Encode as base64
 
-
         # Update metadata with the new values
         current_time = datetime.now()
         for ticker, volume in Volume_for_each_stock.items():
@@ -178,10 +201,17 @@ def portfolio_optimization():
 
             # Now update the metadata for the symbol
             metadata[symbol]["start_time"] = (current_time.hour, current_time.minute)
+            # metadata[symbol]["start_time"] = (10, 35)
             end_time = current_time + timedelta(hours=duration_hours)
             metadata[symbol]["end_time"] = (end_time.hour, end_time.minute)
+            # metadata[symbol]["end_time"] = (16, 30)
             metadata[symbol]["want"] = volume
             metadata[symbol]["left"] = volume
+
+        # Training the Volume Prediction Model
+        stock_symbols = list(metadata.keys())
+        Vol_Pred(stock_symbols)
+        print("===== Finish training Volume Prediction Models for all selected stocks =====")
 
         # Prepare and return the response
         response = {
@@ -201,15 +231,7 @@ def portfolio_optimization():
 
 @app.route('/executions', methods=['GET', 'POST'])
 def executions():
-    # # ============== Create Volume Prediction Models ===============
-    # stock_symbols = list(metadata.keys())
-    # Vol_Pred(stock_symbols)
-    # # ==============================================================
-    # metadata = Adapt_OE(metadata)
     return jsonify(metadata)
-
-import threading
-import time
 
 # def background(a,b):
 #     while not b.is_set():

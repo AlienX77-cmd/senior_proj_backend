@@ -11,6 +11,74 @@ import math
 
 from Utils import *
 
+# metadata = {
+#     "AAV": {
+#         "start_time" : (10,35),
+#         "end_time": (15,00),
+#         "want": 100000,
+#         "left": 100000,
+#         "market_volume":0,
+#         "market_value":0,
+#         "market_vwap":0,
+#         "plan":[],
+#         "my_volume":0,
+#         "my_value":0,
+#         "my_vwap":0
+#     }, 
+#     "BANPU": {
+#         "start_time" : (10,35),
+#         "end_time": (15,00),
+#         "want": 100000,
+#         "left": 100000,
+#         "market_volume":0,
+#         "market_value":0,
+#         "market_vwap":0,
+#         "plan":[],
+#         "my_volume":0,
+#         "my_value":0,
+#         "my_vwap":0
+#     },
+#     "DELTA": {
+#         "start_time" : (10,35),
+#         "end_time": (15,00),
+#         "want": 100000,
+#         "left": 100000,
+#         "market_volume":0,
+#         "market_value":0,
+#         "market_vwap":0,
+#         "plan":[],
+#         "my_volume":0,
+#         "my_value":0,
+#         "my_vwap":0
+#     },
+#     "GULF": {
+#         "start_time" : (10,35),
+#         "end_time": (15,00),
+#         "want": 100000,
+#         "left": 100000,
+#         "market_volume":0,
+#         "market_value":0,
+#         "market_vwap":0,
+#         "plan":[],
+#         "my_volume":0,
+#         "my_value":0,
+#         "my_vwap":0
+#     },
+#     "PTTEP": {
+#         "start_time" : (10,35),
+#         "end_time": (15,00),
+#         "want": 100000,
+#         "left": 100000,
+#         "market_volume":0,
+#         "market_value":0,
+#         "market_vwap":0,
+#         "plan":[],
+#         "my_volume":0,
+#         "my_value":0,
+#         "my_vwap":0
+#     },
+# }
+
 def Adapt_OE(metadata):
     # ===================== Read Real-time Data ====================
     dates = os.listdir("./data")
@@ -50,6 +118,7 @@ def Adapt_OE(metadata):
     cumulative_volumes = {}
     ATO = {}
     prices = {}
+    models = {}
 
     mo_lo_changerate = 0.25
 
@@ -122,25 +191,13 @@ def Adapt_OE(metadata):
                         # upper = V(t(i)) - V(t(i-1))
                         upper = cumulative_volumes[s][-1] - cumulative_volumes[s][-2] #-1 means t(i) => current and -2 mean t(i-1) => previous one
 
-                        # To load a model later for a given symbol and time frame
-                        model_filename = f'models/{s}_{start_time}_{end_time}.pkl'
-                        with open(model_filename, 'rb') as model_file:
-                            loaded_model = pickle.load(model_file)
-
-                        # model_filename = f'models/{s}.pkl'
-                        # if s not in models:
-                        #     with open(model_filename, 'rb') as model_file:
-                        #         model = pickle.load(model_file)
-                        #         models[s] = model
-                        
-                        # loaded_model = models[s][start_time][end_time]
-
-                        # models/symbol.pkl
-                        # {
-                        #     (10,30) : {
-                        #         (22,30) : model
-                        #     }
-                        # }
+                        model_filename = f'models/{s}.pkl'
+                        if s not in models:
+                            with open(model_filename, 'rb') as model_file:
+                                model = pickle.load(model_file)
+                                models[s] = model
+                            
+                        loaded_model = models[s][start_time][end_time]
 
                         # lower = V(hat) - V(t(i-1)) ; V(hat) = V(t(i)) + V(predict) => Volume ที่เกิดจากการ trade จนถึงเวลาปัจจุบันรวมกับ Volume ของทั้งวันที่อาจจะเกิดขึ้นที่ได้จากการทำนายจนจบวัน
                         lower = cumulative_volumes[s][-1] + loaded_model.predict(
@@ -213,3 +270,6 @@ def Adapt_OE(metadata):
         last_time = current_time
         
     return metadata
+
+# metadata_ = Adapt_OE(metadata)
+# print(metadata_)
