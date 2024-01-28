@@ -17,11 +17,11 @@ from io import BytesIO
 import base64
 
 import threading
+from threading import Lock, Thread
 import time
 
 from Volume_Pred import Vol_Pred
-from Adaptive_OE import Adapt_OE
-# from Adaptive_rabbit import Adapt_Rabbit
+from Adaptive_Order import message_processor, consumer_thread
 
 app = Flask(__name__, static_folder='static')
 
@@ -30,28 +30,24 @@ CORS(app)
 
 metadata = {}
 
-# # Function to run in the background thread
-# def execution(metadata):
-#     metadata = Adapt_OE(metadata)
-#     return metadata
+# Create a lock for thread-safe operations on metadata
+metadata_lock = Lock()
 
-# # Thread target function
-# def start_execution_thread():
-#     # Pass the global metadata to the execution function
-#     global metadata
-#     # Start the Adapt_Rabbit function in a separate thread
-#     thread = threading.Thread(target=execution, args=(metadata,))
-#     thread.daemon = True  # This ensures the thread will be closed when the main process exits
-#     thread.start()
-
-# @app.before_first_request
-# def before_first_request():
-#     # This will start the execution thread when the first request hits the Flask server
-#     start_execution_thread()
+@app.route('/shutdown', methods=['POST'])
+def shutdown_server():
+    # Access the global stop_event
+    global stop_event
+    stop_event.set()  # Signal the threads to stop
+    # Perform any cleanup here
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+    return 'Server shutting down...'
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"message": "Mia Khalifa"})
+    return jsonify({"message": "Welcome to the trading app"})
 
 @app.route('/portfolio', methods=['GET', 'POST'])
 def portfolio_optimization():
@@ -200,18 +196,18 @@ def portfolio_optimization():
                 }
 
             # Now update the metadata for the symbol
-            metadata[symbol]["start_time"] = (current_time.hour, current_time.minute)
-            # metadata[symbol]["start_time"] = (10, 35)
+            # metadata[symbol]["start_time"] = (current_time.hour, current_time.minute)
+            metadata[symbol]["start_time"] = (10, 35)
             end_time = current_time + timedelta(hours=duration_hours)
-            metadata[symbol]["end_time"] = (end_time.hour, end_time.minute)
-            # metadata[symbol]["end_time"] = (16, 30)
+            # metadata[symbol]["end_time"] = (end_time.hour, end_time.minute)
+            metadata[symbol]["end_time"] = (12, 30)
             metadata[symbol]["want"] = volume
             metadata[symbol]["left"] = volume
 
         # Training the Volume Prediction Model
-        stock_symbols = list(metadata.keys())
-        Vol_Pred(stock_symbols)
-        print("===== Finish training Volume Prediction Models for all selected stocks =====")
+        # stock_symbols = list(metadata.keys())
+        # Vol_Pred(stock_symbols)
+        # print("===== Finish training Volume Prediction Models for all selected stocks =====")
 
         # Prepare and return the response
         response = {
@@ -231,19 +227,24 @@ def portfolio_optimization():
 
 @app.route('/executions', methods=['GET', 'POST'])
 def executions():
-    return jsonify(metadata)
-
-# def background(a,b):
-#     while not b.is_set():
-#         print("Hello world ",a)
-#         time.sleep(1)
-
+    with metadata_lock:
+        # Work with metadata here
+        return jsonify(metadata)
+    
 if __name__ == '__main__':
-    # a = threading.Event()
-    # t = threading.Thread( target=background , args=(1,a))
-    # Consider using a more secure host and port in production
-    # t.start()
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=False)
-    # print("Hello world")
-    # a.set()
-    # t.join()
+    # This is where we now initialize and start the threads
+    stop_event = threading.Event()
+    consumer_t = threading.Thread(target=consumer_thread, args=(stop_event,))
+    processor_t = threading.Thread(target=message_processor, args=(metadata, stop_event, metadata_lock))
+    
+    consumer_t.start()
+    processor_t.start()
+    
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=False)
+    finally:
+        # Ensure threads are cleaned up on app shutdown
+        stop_event.set()
+        consumer_t.join()
+        processor_t.join()
+    

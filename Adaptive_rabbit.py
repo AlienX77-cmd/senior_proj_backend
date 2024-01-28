@@ -11,34 +11,23 @@ import math
 
 from Utils import *
 
-Queue("Alldata" + randomstring)
-Queue.Bind("MarketByPrice",exchange)
-Queue.Bind("TradeTicker",exchange)
-Queue.declare()
+# Queue("Alldata" + randomstring)
+# Queue.Bind("MarketByPrice",exchange)
+# Queue.Bind("TradeTicker",exchange)
+# Queue.declare()
 
 
 def Adapt_Rabbit(metadata):
-    # ===================== Read Real-time Data ====================
-    # dates = os.listdir("./data")
-    # for date in dates:
-    #     data = []
-    #     # Open the file in read mode ('r')
-    #     with open(f'data/{date}/TradeTickerLog.txt', 'r') as file:
-    #         # Read each line in the file one by one
-    #         for line in file:
-    #             # Print each line
-    #             line = line.strip()  # strip() removes the newline character at the end
-    #             data.append( json.loads(line) )
+
+    last_time = None
     prices_data = {}
     cumulative_volume = {}
     cumulative_volumes = {}
     ATO = {}
     prices = {}
     models = {}
-
     mo_lo_changerate = 0.25
-
-    last_time = None
+    
     while True:
         message = rabbit.get_message()
         message = json.loads(message)
