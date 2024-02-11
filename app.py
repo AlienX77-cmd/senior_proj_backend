@@ -84,8 +84,9 @@ def portfolio_optimization():
         mu = expected_returns.capm_return(adj_prices)
 
         if (constraint == "Minimise risk for a given return"): 
+            # ================== For Instantiating the Efficient Frontier Graph ==================
             # Perform portfolio optimization
-            ef = EfficientFrontier(mu, S)
+            ef = EfficientFrontier(mu, S, weight_bounds=(None, None))
             ef.add_objective(objective_functions.L2_reg)
 
             # Setup for creating Efficient Frontier
@@ -113,18 +114,27 @@ def portfolio_optimization():
             frontier_io.seek(0)
             frontier_b64 = base64.b64encode(frontier_io.read()).decode('utf-8')
 
+            # ==========================================================================================
+
+            # ================== Solving the Efficient Frontier with market_neutral ====================
+            ef1 = EfficientFrontier(mu, S, weight_bounds=(None, None))
+            # Minimize risk for the give return => Expected return = m = 20% (from the first constraint)
+            ef1.efficient_return(user_value, market_neutral=True)
+
             # Cleaned Weights
-            cleaned_weights = ef.clean_weights()
+            cleaned_weights = ef1.clean_weights()
+            cleaned_weights2 = {k: abs(v) for k,v in cleaned_weights.items()}
 
             # Calculate Volume for each stock
             Volume_for_each_stock = dict({k: round(v * volume, 2) for k,v in cleaned_weights.items()})
 
             # Convert the OrderedDict to a regular dict for JSON response
             weights_dict = dict(cleaned_weights)
+            # ==========================================================================================
 
         elif (constraint == "Maximise return for a given risk with L2 regularisation"):
-            # Perform portfolio optimization
-            ef = EfficientFrontier(mu, S)
+            # ================== For Instantiating the Efficient Frontier Graph ==================
+            ef = EfficientFrontier(mu, S, weight_bounds=(None, None))
             ef.add_objective(objective_functions.L2_reg)
 
             # Setup for creating Efficient Frontier
@@ -151,20 +161,28 @@ def portfolio_optimization():
             plt.close(fig)
             frontier_io.seek(0)
             frontier_b64 = base64.b64encode(frontier_io.read()).decode('utf-8')
+            # ==========================================================================================
+
+            # ================== Solving the Efficient Frontier with market_neutral ====================
+            ef1 = EfficientFrontier(mu, S, weight_bounds=(None, None))
+            # Minimize risk for the give return => Expected return = m = 20% (from the first constraint)
+            ef1.efficient_risk(user_value, market_neutral=True)
 
             # Cleaned Weights
-            cleaned_weights = ef.clean_weights()
+            cleaned_weights = ef1.clean_weights()
+            cleaned_weights2 = {k: abs(v) for k,v in cleaned_weights.items()}
 
             # Calculate Volume for each stock
             Volume_for_each_stock = dict({k: round(v * volume, 2) for k,v in cleaned_weights.items()})
 
             # Convert the OrderedDict to a regular dict for JSON response
             weights_dict = dict(cleaned_weights)
-        
+            # ==========================================================================================
+
         else: return
        
         # Create the pie chart using BytesIO
-        series = pd.Series(cleaned_weights)
+        series = pd.Series(cleaned_weights2)
         fig, ax = plt.subplots()
         series.plot.pie(ax=ax)
         pie_chart_io = BytesIO()
@@ -193,16 +211,20 @@ def portfolio_optimization():
                     "my_volume": 0,
                     "my_value": 0,
                     "my_vwap": 0,
+                    "side": 0,
                 }
 
             # Now update the metadata for the symbol
             # metadata[symbol]["start_time"] = (current_time.hour, current_time.minute)
-            metadata[symbol]["start_time"] = (10, 35)
+            metadata[symbol]["start_time"] = (10, 5)
             end_time = current_time + timedelta(hours=duration_hours)
             # metadata[symbol]["end_time"] = (end_time.hour, end_time.minute)
-            metadata[symbol]["end_time"] = (12, 30)
-            metadata[symbol]["want"] = volume
-            metadata[symbol]["left"] = volume
+            metadata[symbol]["end_time"] = (11, 20)
+            metadata[symbol]["want"] = abs(volume)
+            metadata[symbol]["left"] = abs(volume)
+
+            if volume > 0: metadata[symbol]["side"] = 1 # long
+            elif volume < 0: metadata[symbol]["side"] = -1 # short sell
 
         # Training the Volume Prediction Model
         # stock_symbols = list(metadata.keys())
@@ -247,4 +269,3 @@ if __name__ == '__main__':
         stop_event.set()
         consumer_t.join()
         processor_t.join()
-    

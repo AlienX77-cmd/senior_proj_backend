@@ -7,7 +7,10 @@ import queue
 
 import os
 import sys
+
 import datetime
+import time as timet
+
 import pickle 
 
 import pika
@@ -77,6 +80,7 @@ def message_processor(metadata, stop_event, metadata_lock):
                 symbol = trade_data["Symbol"]
                 
                 current_time = (time.hour, time.minute)
+                # print(f"Time frame passed {last_time} -> {current_time}")
                 
                 # Find Common Stock Only
                 if product != "CS":
@@ -170,8 +174,12 @@ def message_processor(metadata, stop_event, metadata_lock):
                                 if len(last_trade) == 0:
                                     continue
 
-                                offer_volume = last_trade[last_trade[:,0] >= mo_price][:,1].sum() # for calculating MO
-                                bid_volume = last_trade[last_trade[:,0] < mo_price][:,1].sum() # for calculating LO
+                                if metadata[s]["side"] == 1: 
+                                    bid_volume = last_trade[last_trade[:,0] < mo_price][:,1].sum() # for calculating LO for buying
+                                    offer_volume = last_trade[last_trade[:,0] >= mo_price][:,1].sum() # for calculating MO for buying
+                                elif metadata[s]["side"] == -1:
+                                    bid_volume = last_trade[last_trade[:,0] >= mo_price][:,1].sum() # for calculating MO for short selling
+                                    offer_volume = last_trade[last_trade[:,0] < mo_price][:,1].sum() # for calculating LO for short selling
                                 
                                 # ------------------------- NEED SVM for performing price prediction --------------------------
             #                     up_or_down = 0 # -> svm predict , up = 1 and don't go up or down = 0 and down = -1
@@ -214,7 +222,7 @@ def message_processor(metadata, stop_event, metadata_lock):
                         # At the end 
                         if time_cmp( end_time, current_time ) == 0:
                                 with metadata_lock:
-                                    need_to_execute_mo = metadata[s]["left"]
+                                    need_to_execute_mo = max(metadata[s]["left"], 0)
                                     need_to_execute_lo = 0
                                     mo_price = prices_data[s][1]
                                     lo_price = prices_data[s][0]
@@ -249,27 +257,3 @@ def consumer_thread(stop_event):
         if channel.is_open:
             channel.close()
         print("RabbitMQ channel closed.")
-
-# # Main execution
-# if __name__ == "__main__":
-#     stop = threading.Event()
-
-#     # Start the consumer and processor threads
-#     consumer_t = threading.Thread(target=consumer_thread, args=(stop,))
-#     processor_t = threading.Thread(target=message_processor, args=(stop,))
-    
-#     consumer_t.start()
-#     processor_t.start()
-
-#     try:
-#         # Keep the main thread alive until a keyboard interrupt
-#         while consumer_t.is_alive() or processor_t.is_alive():
-#             consumer_t.join(timeout=1)
-#             processor_t.join(timeout=1)
-#     except KeyboardInterrupt:
-#         # Signal the threads to stop and clean up
-#         stop.set()
-#         consumer_t.join()
-#         processor_t.join()
-#         connection.close()
-#         sys.exit(0)
